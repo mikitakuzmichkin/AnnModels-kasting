@@ -1,4 +1,4 @@
-import type { Casting, Child, Gender } from '../types'
+import type { Casting, Child, Gender, MediaItem } from '../types'
 
 export const EYES = ['карие', 'голубые', 'зелёные', 'серые']
 export const HAIR = ['блонд', 'русые', 'тёмные', 'рыжие', 'чёрные']
@@ -121,4 +121,10 @@ export async function copyText(text: string) {
   } catch {
     return false
   }
+}
+
+export function visitCards(media: MediaItem[], childId: string) {
+  return media
+    .filter((item) => item.childId === childId && item.kind === 'card')
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 }

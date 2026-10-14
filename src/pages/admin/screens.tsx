@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link, NavLink, Navigate, Outlet, useNavigate, useParams } from 'react-router-dom'
 import { Modal, Portrait, StaleBadges, StatusBadge, VisitPlayer } from '../../components/ui'
-import { ageFrom, asset, copyText, daySeries, formatDate, genderWord, hashUrl, miniLink } from '../../lib/format'
+import { ageFrom, asset, copyText, daySeries, formatDate, genderWord, hashUrl, miniLink, visitCards } from '../../lib/format'
 import { CITIES, EYES, HAIR } from '../../lib/format'
 import { useStore } from '../../store'
 import type { AppStatus, Casting, City, Gender } from '../../types'
@@ -322,7 +322,7 @@ export function CastingBoard() {
   const person = state.children.find((item) => item.id === opened?.childId)
   const parent = state.parents.find((item) => item.id === person?.parentId)
   const gallery = state.media.filter((item) => item.childId === person?.id && item.kind === 'photo')
-  const card = state.media.find((item) => item.id === person?.videoCardId)
+  const cards = person ? visitCards(state.media, person.id) : []
 
   async function copyShare() {
     if (!casting) return
@@ -424,11 +424,11 @@ export function CastingBoard() {
           </p>
           <p>{person.experience}</p>
           <p className="muted">{person.about}</p>
-          <p className="kicker">Видеовизитка</p>
-          <VisitPlayer
-            slides={(card ? [card, ...gallery] : gallery).map((item) => asset(item.src))}
-            videoSrc={card?.video ? asset(card.src) : null}
-          />
+          <p className="kicker">Видеовизитки</p>
+          {cards.map((card) => (
+            <VisitPlayer key={card.id} slides={[asset(card.src)]} videoSrc={card.video ? asset(card.src) : null} />
+          ))}
+          {!cards.length && <p className="muted">Визиток нет.</p>}
           <p className="kicker">Заменить главное фото отклика</p>
           <div className="shots">
             {gallery.map((photo) => (

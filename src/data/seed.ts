@@ -229,14 +229,15 @@ function photo(id: string, childId: string, file: string, title: string, updated
   return { id, childId, kind: 'photo', src: `media/${file}`, title, updatedAt }
 }
 
-function card(id: string, childId: string, file: string, updatedAt: string): MediaItem {
-  return { id, childId, kind: 'card', src: `media/${file}`, title: 'Видеовизитка', updatedAt }
+function card(id: string, childId: string, file: string, updatedAt: string, title = 'Видеовизитка'): MediaItem {
+  return { id, childId, kind: 'card', src: `media/${file}`, title, updatedAt }
 }
 
 const media: MediaItem[] = [
   photo('ph-alisa', 'alisa', 'alisa.jpg', 'Портрет', FRESH),
   photo('ph-alisa-2', 'alisa', 'alisa-2.jpg', 'Альтернатива', FRESH),
   card('card-alisa', 'alisa', 'alisa.jpg', FRESH),
+  card('card-alisa-2', 'alisa', 'alisa-2.jpg', FRESH, 'Видеовизитка 2'),
   photo('ph-sofia', 'sofia', 'sofia.jpg', 'Портрет', FRESH),
   photo('ph-sofia-2', 'sofia', 'sofia-2.jpg', 'Альтернатива', FRESH),
   card('card-sofia', 'sofia', 'sofia.jpg', OLD_CARD),

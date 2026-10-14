@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Modal, StatusBadge, VisitPlayer } from '../../components/ui'
 import { fileToDataUrl, readAsDataUrl } from '../../lib/files'
-import { ageFrom, asset, fitReasons, formatDate, genderWord, isStale, localDay } from '../../lib/format'
+import { ageFrom, asset, fitReasons, formatDate, genderWord, isStale, localDay, visitCards } from '../../lib/format'
 import { downloadZip } from '../../lib/zip'
 import { useStore } from '../../store'
 import { isTelegram } from '../../telegram'
@@ -94,41 +94,18 @@ export function LoginPage() {
   )
 }
 
-function reminderLines(children: Child[], media: ReturnType<typeof useStore>['state']['media'], days: number) {
-  const lines: { childId: string; text: string; to: string }[] = []
-  for (const person of children) {
-    if (person.blocked) continue
-    const photo = media.find((item) => item.id === person.mainPhotoId)
-    const card = person.videoCardId ? media.find((item) => item.id === person.videoCardId) : undefined
-    if (!photo) lines.push({ childId: person.id, text: `${person.firstName}: добавьте фотографии`, to: '/app/media' })
-    else if (isStale(photo.updatedAt, days)) lines.push({ childId: person.id, text: `${person.firstName}: обновите фотографии`, to: '/app/media' })
-    if (!card) lines.push({ childId: person.id, text: `${person.firstName}: добавьте видеовизитку`, to: '/app/media' })
-    else if (isStale(card.updatedAt, days)) lines.push({ childId: person.id, text: `${person.firstName}: обновите видеовизитку`, to: '/app/media' })
-    if (isStale(person.heightUpdatedAt, days)) lines.push({ childId: person.id, text: `${person.firstName}: уточните рост`, to: '/app/profile' })
-  }
+function staleLines(person: Child, media: ReturnType<typeof useStore>['state']['media'], days: number) {
+  const lines: { text: string; to: string }[] = []
+  const photo = media.find((item) => item.id === person.mainPhotoId)
+  const cards = visitCards(media, person.id)
+  if (photo && isStale(photo.updatedAt, days)) lines.push({ text: 'Фотографии', to: '/app/media' })
+  if (cards.some((item) => isStale(item.updatedAt, days))) lines.push({ text: 'Видеовизитка', to: '/app/media' })
+  if (isStale(person.heightUpdatedAt, days)) lines.push({ text: 'Рост', to: '/app/profile' })
   return lines
 }
 
 export function ParentLayout() {
-  const { parent, myChildren, child, unread, selectChild, state } = useStore()
-  const [params] = useSearchParams()
-  const navigate = useNavigate()
-  const [open, setOpen] = useState(false)
-  const [lines, setLines] = useState<{ childId: string; text: string; to: string }[]>([])
-  useEffect(() => {
-    if (!parent) return
-    const force = params.get('popup') === '1'
-    const key = `ann-popup-${parent.id}`
-    if (!force && sessionStorage.getItem(key)) return
-    const next = reminderLines(myChildren, state.media, state.settings.staleDays)
-    if (!next.length) return
-    const timer = window.setTimeout(() => {
-      setLines(next)
-      setOpen(true)
-      sessionStorage.setItem(key, '1')
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [parent, myChildren, params, state.media, state.settings.staleDays])
+  const { parent, myChildren, child, unread, selectChild } = useStore()
 
   const items = [
     ['/app', 'Кастинги'],
@@ -141,14 +118,23 @@ export function ParentLayout() {
   return (
     <div className="playout">
       <header className="phead">
-        <div>
-          <div className="kicker">ANNmodels</div>
-          <strong>{child ? child.firstName : parent?.name}</strong>
+        <div className="phead-top">
+          <div>
+            <div className="kicker">ANNmodels</div>
+            <strong>{child ? child.firstName : parent?.name}</strong>
+          </div>
+          <NavLink to="/app/inbox" className={({ isActive }) => (isActive ? 'bell on' : 'bell')}>
+            Бот
+            {unread > 0 && <span className="dot">{unread}</span>}
+          </NavLink>
         </div>
-        <NavLink to="/app/inbox" className={({ isActive }) => (isActive ? 'bell on' : 'bell')}>
-          Бот
-          {unread > 0 && <span className="dot">{unread}</span>}
-        </NavLink>
+        <nav className="pnav">
+          {items.map(([to, label]) => (
+            <NavLink key={to} to={to} end={to === '/app'} className={({ isActive }) => (isActive ? 'nav-item on' : 'nav-item')}>
+              {label}
+            </NavLink>
+          ))}
+        </nav>
       </header>
       {myChildren.length > 1 && (
         <div className="chips" style={{ padding: '0 16px 8px' }}>
@@ -168,49 +154,26 @@ export function ParentLayout() {
       <div className="pbody">
         <Outlet />
       </div>
-      <nav className="pnav">
-        {items.map(([to, label]) => (
-          <NavLink key={to} to={to} end={to === '/app'} className={({ isActive }) => (isActive ? 'nav-item on' : 'nav-item')}>
-            {label}
-          </NavLink>
-        ))}
-      </nav>
-      {open && (
-        <Modal title="Пора обновить анкету" onClose={() => setOpen(false)}>
-          <p className="muted">Если фото, визитка или рост давно не менялись, заказчик видит устаревшую карточку.</p>
-          {lines.map((line) => (
-            <button
-              key={line.text}
-              className="btn btn-ghost btn-block"
-              type="button"
-              onClick={() => {
-                selectChild(line.childId)
-                setOpen(false)
-                navigate(line.to)
-              }}
-            >
-              {line.text}
-            </button>
-          ))}
-        </Modal>
-      )}
     </div>
   )
 }
 
+function fittingChildren(casting: Parameters<typeof fitReasons>[0], children: Child[]) {
+  return children.filter((person) => !person.blocked && fitReasons(casting, person).length === 0)
+}
+
 export function Feed() {
-  const { state, child } = useStore()
+  const { state, myChildren } = useStore()
   const [gender, setGender] = useState<'any' | Gender>('any')
   const [age, setAge] = useState('')
   const [height, setHeight] = useState('')
-  const [onlyFit, setOnlyFit] = useState(false)
 
   const castings = state.castings
     .filter((item) => item.published)
+    .filter((item) => fittingChildren(item, myChildren).length > 0)
     .filter((item) => gender === 'any' || item.gender === 'any' || item.gender === gender)
     .filter((item) => age === '' || (Number(age) >= item.ageMin && Number(age) <= item.ageMax))
     .filter((item) => height === '' || (Number(height) >= item.heightMin && Number(height) <= item.heightMax))
-    .filter((item) => !onlyFit || !child || fitReasons(item, child).length === 0)
     .sort((a, b) => a.date.localeCompare(b.date))
 
   return (
@@ -240,13 +203,9 @@ export function Feed() {
             <input value={height} onChange={(event) => setHeight(event.target.value)} inputMode="numeric" placeholder="122" />
           </label>
         </div>
-        <label className="row">
-          <input type="checkbox" checked={onlyFit} onChange={(event) => setOnlyFit(event.target.checked)} />
-          <span>Только подходящие {child ? child.firstName : 'анкете'}</span>
-        </label>
       </div>
       {castings.map((item) => {
-        const reasons = child ? fitReasons(item, child) : []
+        const names = fittingChildren(item, myChildren).map((person) => person.firstName)
         return (
           <Link key={item.id} to={`/app/castings/${item.id}`} className="casting" style={{ textDecoration: 'none' }}>
             <p className="kicker">{item.brand}</p>
@@ -256,37 +215,76 @@ export function Feed() {
               <br />
               {item.city} · {genderWord(item.gender, true)} · {item.ageMin}–{item.ageMax} лет · {item.heightMin}–{item.heightMax} см
             </p>
-            {child && <span className={reasons.length ? 'badge warn' : 'badge ok'}>{reasons.length ? `Не подходит: ${reasons.join(', ')}` : `Подходит ${child.firstName}`}</span>}
+            <span className="badge ok">Подходит: {names.join(', ')}</span>
           </Link>
         )
       })}
-      {!castings.length && <p className="empty">По этим фильтрам кастингов нет.</p>}
+      {!castings.length && <p className="empty">Сейчас нет кастингов, которые подходят вашим детям.</p>}
     </>
   )
 }
 
 export function CastingPage() {
   const { id } = useParams()
-  const { state, child, apply } = useStore()
+  const navigate = useNavigate()
+  const { state, child, myChildren, apply, addMedia } = useStore()
   const casting = state.castings.find((item) => item.id === id)
   const photos = state.media.filter((item) => item.childId === child?.id && item.kind === 'photo')
-  const [alts, setAlts] = useState<string[]>([])
+  const latest = [...photos].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  const [picker, setPicker] = useState(false)
+  const [picked, setPicked] = useState<string[]>([])
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
+  const [stale, setStale] = useState<{ text: string; to: string }[] | null>(null)
   const existing = state.applications.find((item) => item.castingId === id && item.childId === child?.id)
 
   if (!casting || !child) return <p className="empty">Кастинг не найден.</p>
+  const matched = fittingChildren(casting, myChildren)
   const reasons = fitReasons(casting, child)
+  const canApply = reasons.length === 0 && !child.blocked
+
+  function openPicker() {
+    setPicked(latest.map((item) => item.id))
+    setError('')
+    setPicker(true)
+  }
+
+  function openApply() {
+    if (!child) return
+    const next = staleLines(child, state.media, state.settings.staleDays)
+    if (next.length) {
+      setStale(next)
+      return
+    }
+    openPicker()
+  }
 
   function toggle(photoId: string) {
-    setAlts((current) => (current.includes(photoId) ? current.filter((item) => item !== photoId) : [...current, photoId]))
+    setPicked((current) => (current.includes(photoId) ? current.filter((item) => item !== photoId) : [...current, photoId]))
+  }
+
+  async function onPhoto(file: File) {
+    setError('')
+    try {
+      const src = await fileToDataUrl(file)
+      const mediaId = addMedia({ childId: child!.id, kind: 'photo', src, title: 'Новое фото' }, { asMain: !child!.mainPhotoId })
+      setPicked((current) => (current.includes(mediaId) ? current : [mediaId, ...current]))
+    } catch {
+      setError('Не удалось добавить фото.')
+    }
   }
 
   function send() {
-    const ids = [child!.mainPhotoId, ...alts.filter((item) => item !== child!.mainPhotoId)]
-    const result = apply(casting!.id, child!.id, ids.filter(Boolean))
+    const ids = [
+      ...(child!.mainPhotoId && picked.includes(child!.mainPhotoId) ? [child!.mainPhotoId] : []),
+      ...picked.filter((item) => item !== child!.mainPhotoId),
+    ]
+    const result = apply(casting!.id, child!.id, ids)
     if (result) setError(result)
-    else setDone(true)
+    else {
+      setPicker(false)
+      setDone(true)
+    }
   }
 
   return (
@@ -306,33 +304,77 @@ export function CastingPage() {
       <p>{casting.description}</p>
       <p className="muted">{casting.criteria}</p>
       <span className={reasons.length ? 'badge warn' : 'badge ok'}>
-        {reasons.length ? `${child.firstName} не подходит: ${reasons.join(', ')}` : `Подходит анкете ${child.firstName}`}
+        {reasons.length
+          ? `${child.firstName} не подходит: ${reasons.join(', ')}${matched.length ? `. Подходит: ${matched.map((person) => person.firstName).join(', ')}` : ''}`
+          : `Подходит анкете ${child.firstName}`}
       </span>
-      {existing ? (
+      {!matched.length ? (
+        <p className="empty">Этот кастинг не подходит вашим детям.</p>
+      ) : existing ? (
         <div className="panel stack">
-          <span>{done ? 'Заявка ушла на рассмотрение. Базовое портфолио приложено.' : 'Отклик уже отправлен'}</span>
+          <span>{done ? 'Заявка ушла на рассмотрение. Выбранные фото приложены.' : 'Отклик уже отправлен'}</span>
           <StatusBadge status={existing.status} />
           <Link to="/app/applications">Мои отклики</Link>
         </div>
       ) : (
-        <div className="stack">
-          <p className="muted">Главное фото прикрепится само. Ниже можно добавить альтернативные кадры.</p>
-          <div className="shots">
-            {photos.map((photo) => {
-              const main = photo.id === child.mainPhotoId
-              const on = main || alts.includes(photo.id)
-              return (
-                <button key={photo.id} type="button" className={on ? 'shot on' : 'shot'} onClick={() => !main && toggle(photo.id)}>
+        <button className="btn btn-gold btn-block" type="button" disabled={!canApply} onClick={openApply}>
+          {canApply ? 'Откликнуться' : 'Выберите подходящего ребёнка'}
+        </button>
+      )}
+      {picker && (
+        <Modal title="Фото для отклика" onClose={() => setPicker(false)}>
+          <p className="muted">
+            {latest.length
+              ? 'Отметьте, какие фото приложить, или добавьте новые.'
+              : 'В галерее пока нет фото. Добавьте новые, чтобы откликнуться.'}
+          </p>
+          {latest.length > 0 && (
+            <div className="shots">
+              {latest.map((photo) => (
+                <button key={photo.id} type="button" className={picked.includes(photo.id) ? 'shot on' : 'shot'} onClick={() => toggle(photo.id)}>
                   <img src={asset(photo.src)} alt={photo.title} />
                 </button>
-              )
-            })}
-          </div>
+              ))}
+            </div>
+          )}
+          <label className="btn btn-ghost btn-block">
+            Добавить новое фото
+            <input
+              hidden
+              type="file"
+              accept="image/*"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                event.target.value = ''
+                if (file) void onPhoto(file)
+              }}
+            />
+          </label>
           {error && <p className="badge bad">{error}</p>}
-          <button className="btn btn-gold btn-block" type="button" disabled={child.blocked || !photos.length} onClick={send}>
-            {child.blocked ? 'Профиль заблокирован' : 'Откликнуться'}
+          <button className="btn btn-gold btn-block" type="button" disabled={!picked.length} onClick={send}>
+            {picked.length ? `Отправить · ${picked.length}` : 'Выберите фото'}
           </button>
-        </div>
+        </Modal>
+      )}
+      {stale && (
+        <Modal title="Пора обновить анкету" onClose={() => setStale(null)}>
+          <p className="muted">У {child.firstName} просрочены параметры. Заказчик увидит старые данные.</p>
+          {stale.map((line) => (
+            <button key={line.text} className="btn btn-ghost btn-block" type="button" onClick={() => navigate(line.to)}>
+              {line.text}
+            </button>
+          ))}
+          <button
+            className="btn btn-gold btn-block"
+            type="button"
+            onClick={() => {
+              setStale(null)
+              openPicker()
+            }}
+          >
+            Продолжить отклик
+          </button>
+        </Modal>
       )}
     </>
   )
@@ -371,17 +413,12 @@ export function AppsPage() {
 }
 
 export function ProfilePage() {
-  const { child, updateChild, confirmHeight, addChild, state } = useStore()
+  const { child, updateChild, confirmHeight, addChild } = useStore()
   const [form, setForm] = useState<Child | null>(child)
-  const [picked, setPicked] = useState<string[]>([])
-  const [zipError, setZipError] = useState('')
-  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     setForm(child)
-    const photos = state.media.filter((item) => item.childId === child?.id && item.kind === 'photo').map((item) => item.id)
-    setPicked(photos)
-  }, [child, state.media])
+  }, [child])
 
   if (!form || !child) {
     return (
@@ -390,8 +427,6 @@ export function ProfilePage() {
       </button>
     )
   }
-
-  const photos = state.media.filter((item) => item.childId === child.id && item.kind === 'photo')
 
   function save(event: FormEvent) {
     event.preventDefault()
@@ -408,22 +443,6 @@ export function ProfilePage() {
       shoe: Number(form!.shoe),
       about: form!.about,
     })
-  }
-
-  async function download(all: boolean) {
-    setZipError('')
-    setSaving(true)
-    try {
-      const source = photos.filter((item) => all || picked.includes(item.id))
-      await downloadZip(
-        source.map((item) => ({ name: `${child!.firstName}-${item.title}.jpg`, src: item.src })),
-        `${child!.firstName}-portfolio.zip`,
-      )
-    } catch {
-      setZipError('Не удалось собрать архив.')
-    } finally {
-      setSaving(false)
-    }
   }
 
   return (
@@ -509,28 +528,6 @@ export function ProfilePage() {
       <button className="btn btn-ghost" type="button" onClick={() => confirmHeight(child.id)}>
         Рост подтверждаю, плашку снять
       </button>
-      <div className="stack">
-        <strong>Скачать портфолио</strong>
-        {photos.map((photo) => (
-          <label key={photo.id} className="row">
-            <input
-              type="checkbox"
-              checked={picked.includes(photo.id)}
-              onChange={() => setPicked((current) => (current.includes(photo.id) ? current.filter((item) => item !== photo.id) : [...current, photo.id]))}
-            />
-            <span>{photo.title}</span>
-          </label>
-        ))}
-        <div className="row">
-          <button className="btn btn-ghost btn-sm" type="button" disabled={saving || !picked.length} onClick={() => download(false)}>
-            Скачать выбранное
-          </button>
-          <button className="btn btn-ghost btn-sm" type="button" disabled={saving || !photos.length} onClick={() => download(true)}>
-            Скачать всё
-          </button>
-        </div>
-        {zipError && <p className="badge bad">{zipError}</p>}
-      </div>
     </form>
   )
 }
@@ -538,28 +535,74 @@ export function ProfilePage() {
 export function MediaPage() {
   const { child, state, addMedia, touchMedia, updateChild } = useStore()
   const [note, setNote] = useState('')
+  const [picked, setPicked] = useState<string[]>([])
+  const [zipError, setZipError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [watchId, setWatchId] = useState<string | null>(null)
+
+  useEffect(() => {
+    setPicked([])
+    setWatchId(null)
+  }, [child?.id])
+
   if (!child) return <p className="empty">Сначала создайте анкету.</p>
 
   const photos = state.media.filter((item) => item.childId === child.id && item.kind === 'photo')
-  const card = state.media.find((item) => item.id === child.videoCardId)
-  const slides = photos.map((item) => asset(item.src))
+  const cards = visitCards(state.media, child.id)
+  const library = [...photos, ...cards]
+  const watch = library.find((item) => item.id === watchId)
+  const allPicked = library.length > 0 && library.every((item) => picked.includes(item.id))
+
+  function toggle(id: string) {
+    setPicked((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]))
+  }
+
+  function onTile(id: string, kind: 'photo' | 'card') {
+    if (picked.length) {
+      toggle(id)
+      return
+    }
+    if (kind === 'photo') updateChild(child!.id, { mainPhotoId: id })
+    else setWatchId(id)
+  }
 
   async function onPhoto(file: File) {
     const src = await fileToDataUrl(file)
     addMedia({ childId: child!.id, kind: 'photo', src, title: 'Новое фото' }, { asMain: !child!.mainPhotoId })
-    setNote('Фото добавлено в галерею.')
+    setNote('Фото добавлено в медиатеку.')
   }
 
   async function onCard(file: File) {
     if (file.type.startsWith('video')) {
       const src = file.size > 1_200_000 ? URL.createObjectURL(file) : await readAsDataUrl(file)
-      addMedia({ childId: child!.id, kind: 'card', src, title: 'Видеовизитка', video: true }, { asCard: true })
-      setNote(file.size > 1_200_000 ? 'Видео видно до обновления страницы: в прототипе большие файлы не пишутся в память браузера.' : 'Видеовизитка обновлена.')
+      addMedia({ childId: child!.id, kind: 'card', src, title: `Видеовизитка ${cards.length + 1}`, video: true }, { asCard: true })
+      setNote(file.size > 1_200_000 ? 'Видео видно до обновления страницы: в прототипе большие файлы не пишутся в память браузера.' : 'Видео добавлено в медиатеку.')
       return
     }
     const src = await fileToDataUrl(file)
-    addMedia({ childId: child!.id, kind: 'card', src, title: 'Видеовизитка' }, { asCard: true })
-    setNote('Визитка обновлена.')
+    addMedia({ childId: child!.id, kind: 'card', src, title: `Видеовизитка ${cards.length + 1}` }, { asCard: true })
+    setNote('Визитка добавлена в медиатеку.')
+  }
+
+  async function download() {
+    setZipError('')
+    setSaving(true)
+    try {
+      const source = library.filter((item) => picked.includes(item.id))
+      await downloadZip(
+        source.map((item, index) => {
+          const ext = item.video ? 'mp4' : 'jpg'
+          const kind = item.video ? 'video' : item.kind === 'card' ? 'vizitka' : 'foto'
+          return { name: `${child!.firstName}-${kind}-${index + 1}.${ext}`, src: item.src }
+        }),
+        `${child!.firstName}-portfolio.zip`,
+      )
+      setNote('Архив скачан.')
+    } catch {
+      setZipError('Не удалось собрать архив.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -567,20 +610,37 @@ export function MediaPage() {
       <h1 className="serif" style={{ fontSize: 40 }}>
         Медиа
       </h1>
-      <p className="muted">Галерея, отдельные видео и поле видеовизитки. Главное фото уходит в отклик.</p>
+      <p className="muted">Отметьте кружком фото и видео, затем скачайте архив. Пока ничего не выбрано, нажатие на фото делает его главным.</p>
       <div className="shots">
-        {photos.map((photo) => (
-          <button
-            key={photo.id}
-            type="button"
-            className={photo.id === child.mainPhotoId ? 'shot on' : 'shot'}
-            onClick={() => updateChild(child.id, { mainPhotoId: photo.id })}
-          >
-            <img src={asset(photo.src)} alt={photo.title} />
-          </button>
-        ))}
+        {library.map((item) => {
+          const on = picked.includes(item.id)
+          return (
+            <div key={item.id} className="file">
+              <button
+                type="button"
+                className={item.id === child.mainPhotoId ? 'shot on' : 'shot'}
+                onClick={() => onTile(item.id, item.kind === 'photo' ? 'photo' : 'card')}
+              >
+                <img src={asset(item.src)} alt={item.title} />
+                {item.kind === 'card' && <span className="kind">{item.video ? 'видео' : 'визитка'}</span>}
+              </button>
+              <button type="button" className={on ? 'tick on' : 'tick'} aria-label={on ? 'Снять выбор' : 'Выбрать'} onClick={() => toggle(item.id)} />
+            </div>
+          )
+        })}
       </div>
-      <label className="btn btn-ghost">
+      {!library.length && <p className="empty">В медиатеке пока пусто.</p>}
+      <div className="pick-bar">
+        <span>{picked.length ? `Выбрано ${picked.length}` : 'Ничего не выбрано'}</span>
+        <button className="btn btn-ghost btn-sm" type="button" disabled={!library.length} onClick={() => setPicked(allPicked ? [] : library.map((item) => item.id))}>
+          {allPicked ? 'Снять' : 'Все'}
+        </button>
+        <button className="btn btn-gold btn-sm" type="button" disabled={saving || !picked.length} onClick={() => void download()}>
+          {saving ? 'Архив…' : 'Скачать'}
+        </button>
+      </div>
+      {zipError && <p className="badge bad">{zipError}</p>}
+      <label className="btn btn-ghost btn-block">
         Загрузить фото
         <input
           hidden
@@ -588,37 +648,35 @@ export function MediaPage() {
           accept="image/*"
           onChange={(event) => {
             const file = event.target.files?.[0]
+            event.target.value = ''
             if (file) void onPhoto(file)
           }}
         />
       </label>
-      {photos[0] && (
-        <button className="btn btn-ghost" type="button" onClick={() => touchMedia(child.mainPhotoId)}>
-          Отметить фото обновлённым
+      <label className="btn btn-ghost btn-block">
+        Добавить видео
+        <input
+          hidden
+          type="file"
+          accept="image/*,video/*"
+          onChange={(event) => {
+            const file = event.target.files?.[0]
+            event.target.value = ''
+            if (file) void onCard(file)
+          }}
+        />
+      </label>
+      {picked.length > 0 && (
+        <button className="btn btn-ghost btn-block" type="button" onClick={() => picked.forEach((id) => touchMedia(id))}>
+          Отметить выбранное свежим
         </button>
       )}
-      <div className="stack">
-        <p className="kicker">Видеовизитка</p>
-        <VisitPlayer slides={card ? [asset(card.src), ...slides] : slides} videoSrc={card?.video ? asset(card.src) : null} />
-        <label className="btn btn-gold">
-          Заменить видеовизитку
-          <input
-            hidden
-            type="file"
-            accept="image/*,video/*"
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              if (file) void onCard(file)
-            }}
-          />
-        </label>
-        {card && (
-          <button className="btn btn-ghost" type="button" onClick={() => touchMedia(card.id)}>
-            Отметить визитку обновлённой
-          </button>
-        )}
-        {note && <p className="note">{note}</p>}
-      </div>
+      {note && <p className="note">{note}</p>}
+      {watch && (
+        <Modal title={watch.title} onClose={() => setWatchId(null)}>
+          <VisitPlayer slides={[asset(watch.src)]} videoSrc={watch.video ? asset(watch.src) : null} />
+        </Modal>
+      )}
     </>
   )
 }

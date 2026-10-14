@@ -216,7 +216,7 @@ interface StoreValue {
   updateChild: (id: string, patch: Partial<Child>) => void
   confirmHeight: (id: string) => void
   addChild: () => void
-  addMedia: (media: Omit<MediaItem, 'id' | 'updatedAt'>, options?: { asMain?: boolean; asCard?: boolean }) => void
+  addMedia: (media: Omit<MediaItem, 'id' | 'updatedAt'>, options?: { asMain?: boolean; asCard?: boolean }) => string
   touchMedia: (id: string) => void
   createCasting: (draft: Omit<Casting, 'id' | 'createdAt'>) => string
   updateCasting: (id: string, patch: Partial<Casting>) => void
@@ -318,12 +318,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       })
     },
     addMedia(media, options) {
+      const id = uid('media')
       dispatch({
         type: 'addMedia',
-        media: { ...media, id: uid('media'), updatedAt: new Date().toISOString() },
+        media: { ...media, id, updatedAt: new Date().toISOString() },
         asMain: options?.asMain,
         asCard: options?.asCard,
       })
+      return id
     },
     touchMedia(id) {
       dispatch({ type: 'touchMedia', id })

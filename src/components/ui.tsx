@@ -14,11 +14,11 @@ export function StatusBadge({ status }: { status: AppStatus }) {
 
 export function StaleBadges({ child, media, days }: { child: Child; media: MediaItem[]; days: number }) {
   const photo = media.find((item) => item.id === child.mainPhotoId)
-  const card = child.videoCardId ? media.find((item) => item.id === child.videoCardId) : undefined
+  const cards = media.filter((item) => item.childId === child.id && item.kind === 'card')
   return (
     <>
       {photo && isStale(photo.updatedAt, days) && <span className="badge warn">Старое фото</span>}
-      {card && isStale(card.updatedAt, days) && <span className="badge warn">Старая видеовизитка</span>}
+      {cards.some((item) => isStale(item.updatedAt, days)) && <span className="badge warn">Старая видеовизитка</span>}
     </>
   )
 }

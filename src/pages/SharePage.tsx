@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { VisitPlayer } from '../components/ui'
-import { ageFrom, asset, formatDate, genderWord } from '../lib/format'
+import { ageFrom, asset, formatDate, genderWord, visitCards } from '../lib/format'
 import { downloadZip } from '../lib/zip'
 import { useStore } from '../store'
 
@@ -64,7 +64,7 @@ export function SharePage() {
         if (!person) return null
         const photos = state.media.filter((media) => media.childId === person.id && media.kind === 'photo')
         const cover = state.media.find((media) => media.id === item.coverPhotoId) || photos[0]
-        const card = state.media.find((media) => media.id === person.videoCardId)
+        const cards = visitCards(state.media, person.id)
         return (
           <article key={item.id} className="model">
             <PortraitBlock src={cover?.src} name={person.firstName} />
@@ -78,7 +78,14 @@ export function SharePage() {
                 Глаза {person.eyeColor} · волосы {person.hairColor} · обувь {person.shoe}
               </p>
               <p className="muted">{person.experience}</p>
-              <VisitPlayer slides={photos.map((photo) => asset(photo.src))} videoSrc={card?.video ? asset(card.src) : null} />
+              {cards.map((card) => (
+                <VisitPlayer
+                  key={card.id}
+                  slides={card.video ? photos.map((photo) => asset(photo.src)) : [asset(card.src)]}
+                  videoSrc={card.video ? asset(card.src) : null}
+                />
+              ))}
+              {!cards.length && <VisitPlayer slides={photos.map((photo) => asset(photo.src))} />}
               <div className="stack">
                 {photos.map((photo) => (
                   <label key={photo.id} className="row">
