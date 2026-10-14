@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { Logo } from '../components/Logo'
 import { VisitPlayer } from '../components/ui'
 import { ageFrom, asset, formatDate, genderWord, visitCards } from '../lib/format'
 import { downloadZip } from '../lib/zip'
@@ -56,8 +57,9 @@ export function SharePage() {
   return (
     <main className="client">
       <header className="stack">
-        <p className="kicker">ANNmodels · подборка</p>
-        <h1 className="serif" style={{ fontSize: 'clamp(48px, 8vw, 78px)', lineHeight: 0.9 }}>
+        <Logo className="logo logo-lg" />
+        <p className="kicker">Подборка</p>
+        <h1 className="serif" style={{ fontSize: 'clamp(44px, 7vw, 68px)', fontWeight: 300 }}>
           {casting.title}
         </h1>
         <p className="muted">
@@ -124,8 +126,8 @@ export function SharePage() {
         </button>
       </div>
       {error && <p className="badge bad">{error}</p>}
-      <Link to="/" className="dim">
-        ANNmodels
+      <Link to="/" aria-label="ANNmodels">
+        <Logo className="logo logo-sm" />
       </Link>
     </main>
   )

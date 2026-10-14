@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, NavLink, Navigate, Outlet, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Logo } from '../../components/Logo'
 import { Modal, Portrait, StaleBadges, VisitPlayer } from '../../components/ui'
 import { ageFrom, asset, copyText, daySeries, formatDate, genderWord, hashUrl, miniLink, visitCards } from '../../lib/format'
 import { CITIES, EYES, HAIR } from '../../lib/format'
@@ -42,7 +43,7 @@ export function AdminLogin() {
   return (
     <main className="admin-login">
       <form className="panel stack" onSubmit={submit}>
-        <p className="kicker">ANNmodels</p>
+        <Logo />
         <h1 className="serif">Вход для администратора</h1>
         <p className="muted">Сайт агентства: кастинги, анкеты и отклики. С телефона и с компьютера.</p>
         <label className="field">
@@ -74,7 +75,7 @@ export function AdminLayout() {
     <div className="shell">
       <aside className="side">
         <div className="brand">
-          <div className="kicker">ANNmodels</div>
+          <Logo />
           <strong>Администраторы</strong>
         </div>
         {ADMIN_LINKS.map(([to, label]) => (
@@ -93,7 +94,7 @@ export function AdminLayout() {
         </button>
       </aside>
       <header className="admin-top">
-        <strong>ANNmodels</strong>
+        <Logo className="logo logo-sm" />
         <button className="btn btn-ghost btn-sm" type="button" onClick={adminLogout}>
           Выйти
         </button>

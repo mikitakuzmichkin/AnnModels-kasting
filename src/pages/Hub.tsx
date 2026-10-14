@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { Logo } from '../components/Logo'
 import { phoneMask } from '../lib/format'
 import { useStore } from '../store'
 import { startParam } from '../telegram'
@@ -37,7 +38,7 @@ export function Hub() {
     <main className="page hub">
       <div className="wrap stack">
         <header className="hero">
-          <p className="kicker">ANNmodels</p>
+          <Logo className="logo logo-lg" />
           <h1 className="serif">Два входа: родители и администраторы</h1>
           <p className="muted" style={{ maxWidth: 640, marginTop: 12 }}>
             Приложение для родителей открывается внутри Telegram. Сайт администраторов работает в браузере телефона и компьютера. Бота к Mini App подключаете вы.

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Logo } from '../../components/Logo'
 import { Modal, StatusBadge, VisitPlayer } from '../../components/ui'
 import { fileToDataUrl, readAsDataUrl } from '../../lib/files'
 import { ageFrom, asset, fitReasons, formatDate, genderWord, isStale, localDay, visitCards } from '../../lib/format'
@@ -56,8 +57,8 @@ export function LoginPage() {
   return (
     <form className="playout" onSubmit={submit}>
       <div className="pbody" style={{ justifyContent: 'center' }}>
-        <p className="kicker">ANNmodels</p>
-        <h1 className="serif" style={{ fontSize: 48, lineHeight: 0.9 }}>
+        <Logo />
+        <h1 className="serif" style={{ fontSize: 44 }}>
           Вход по заявке
         </h1>
         <p className="muted">Кабинет открывается, если номер уже есть в заявке агентства.</p>
@@ -120,8 +121,8 @@ export function ParentLayout() {
       <header className="phead">
         <div className="phead-top">
           <div>
-            <div className="kicker">ANNmodels</div>
-            <strong>{child ? child.firstName : parent?.name}</strong>
+            <Logo className="logo logo-sm" />
+            <strong className="who">{child ? child.firstName : parent?.name}</strong>
           </div>
           <NavLink to="/app/inbox" className={({ isActive }) => (isActive ? 'bell on' : 'bell')}>
             Бот
@@ -174,7 +175,7 @@ export function Feed() {
     <>
       <div>
         <p className="kicker">Лента</p>
-        <h1 className="serif" style={{ fontSize: 40, lineHeight: 0.95 }}>
+        <h1 className="serif" style={{ fontSize: 40 }}>
           Активные кастинги
         </h1>
       </div>
@@ -267,7 +268,7 @@ export function CastingPage() {
         ← Все кастинги
       </Link>
       <p className="kicker">{casting.brand}</p>
-      <h1 className="serif" style={{ fontSize: 42, lineHeight: 0.95 }}>
+      <h1 className="serif" style={{ fontSize: 42 }}>
         {casting.title}
       </h1>
       <p className="meta">
