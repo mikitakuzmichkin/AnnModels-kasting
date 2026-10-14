@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, NavLink, Navigate, Outlet, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Modal, Portrait, StaleBadges } from '../../components/ui'
+import { Modal, Portrait, StaleBadges, VisitPlayer } from '../../components/ui'
 import { ageFrom, asset, copyText, daySeries, formatDate, genderWord, hashUrl, miniLink, visitCards } from '../../lib/format'
 import { CITIES, EYES, HAIR } from '../../lib/format'
 import { useStore } from '../../store'
-import type { AppStatus, Casting, City, Gender } from '../../types'
+import type { AppStatus, Casting, City, Gender, MediaItem } from '../../types'
 
 const TABS: { id: AppStatus; label: string }[] = [
   { id: 'review', label: 'Текущие отклики' },
@@ -370,6 +370,18 @@ function ApplicationCard({ appId }: { appId: string }) {
   const app = state.applications.find((item) => item.id === appId)
   const model = state.children.find((item) => item.id === app?.childId)
   const [zoomId, setZoomId] = useState<string | null>(null)
+  const [picker, setPicker] = useState(false)
+  const [picked, setPicked] = useState<string[]>([])
+
+  useEffect(() => {
+    if (!zoomId) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setZoomId(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [zoomId])
+
   if (!app || !model) return null
 
   const photos = app.photoIds
@@ -378,7 +390,19 @@ function ApplicationCard({ appId }: { appId: string }) {
   const cards = visitCards(state.media, model.id)
   const avatar = state.media.find((item) => item.id === model.mainPhotoId) || photos[0]
   const shown = state.media.find((item) => item.id === zoomId)
-  const profile = `/admin/models?child=${model.id}&app=${app.id}`
+  const library = state.media.filter((item) => item.childId === model.id && item.kind === 'photo')
+  const chosen = picked
+    .map((id) => library.find((item) => item.id === id))
+    .filter((item): item is MediaItem => Boolean(item))
+
+  function openPicker() {
+    setPicked(app!.photoIds)
+    setPicker(true)
+  }
+
+  function togglePick(id: string) {
+    setPicked((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]))
+  }
 
   function drop(id: string) {
     setAppPhotos(
@@ -391,9 +415,9 @@ function ApplicationCard({ appId }: { appId: string }) {
   return (
     <article className="reply">
       <div className="reply-head">
-        <Link className="avatar" to={profile}>
+        <button className="avatar" type="button" aria-label="Фото отклика" onClick={openPicker}>
           {avatar ? <img src={asset(avatar.src)} alt="" /> : model.firstName.slice(0, 1)}
-        </Link>
+        </button>
         <div className="stack">
           <strong>
             {model.firstName} {model.lastName}
@@ -444,22 +468,70 @@ function ApplicationCard({ appId }: { appId: string }) {
             </button>
           </div>
         ))}
-        <Link className="add-tile" to={profile} aria-label="Добавить фото">
+        <button className="add-tile" type="button" aria-label="Добавить фото" onClick={openPicker}>
           +
-        </Link>
+        </button>
       </div>
       {shown && (
-        <Modal title={shown.kind === 'card' ? 'Видеовизитка' : 'Фото'} onClose={() => setZoomId(null)}>
-          <div className="zoom-frame">
-            {shown.video ? (
-              <video src={asset(shown.src)} controls autoPlay playsInline />
+        <div className="overlay viewer" onClick={() => setZoomId(null)} role="presentation">
+          <div className="viewer-frame" onClick={(event) => event.stopPropagation()} role="dialog" aria-label={shown.kind === 'card' ? 'Видеовизитка' : 'Фото'}>
+            <button className="viewer-x" type="button" aria-label="Закрыть" onClick={() => setZoomId(null)}>
+              ×
+            </button>
+            {shown.kind === 'card' ? (
+              <VisitPlayer
+                autoPlay
+                slides={(photos.length ? photos : [shown]).map((item) => asset(item.src))}
+                videoSrc={shown.video ? asset(shown.src) : null}
+              />
             ) : (
               <img src={asset(shown.src)} alt={shown.title} />
             )}
           </div>
+        </div>
+      )}
+      {picker && (
+        <Modal title={`${model.firstName} ${model.lastName}`} onClose={() => setPicker(false)}>
+          <p className="kicker">Выбранные фото</p>
+          {chosen.length ? (
+            <div className="shots">
+              {chosen.map((item) => (
+                <PhotoPick key={item.id} item={item} on onToggle={() => togglePick(item.id)} />
+              ))}
+            </div>
+          ) : (
+            <p className="muted">Для отклика пока ничего не выбрано.</p>
+          )}
+          <p className="kicker">Все фото</p>
+          {library.length ? (
+            <div className="shots">
+              {library.map((item) => (
+                <PhotoPick key={item.id} item={item} on={picked.includes(item.id)} onToggle={() => togglePick(item.id)} />
+              ))}
+            </div>
+          ) : (
+            <p className="muted">В анкете пока нет фото.</p>
+          )}
+          <button className="btn btn-gold" type="button" disabled={!picked.length} onClick={() => { setAppPhotos(app.id, picked); setPicker(false) }}>
+            Сохранить выбор
+          </button>
+          <Link className="btn btn-ghost btn-block" to={`/admin/models/${model.id}`}>
+            Перейти в профиль
+          </Link>
         </Modal>
       )}
     </article>
+  )
+}
+
+function PhotoPick({ item, on, onToggle }: { item: MediaItem; on: boolean; onToggle: () => void }) {
+  return (
+    <div className="file">
+      <button type="button" className={on ? 'shot on' : 'shot'} onClick={onToggle}>
+        <img src={asset(item.src)} alt={item.title} />
+      </button>
+      <button type="button" className={on ? 'tick on' : 'tick'} aria-label={on ? 'Снять выбор' : 'Выбрать'} onClick={onToggle} />
+    </div>
   )
 }
 
@@ -700,152 +772,125 @@ export function ModelsPage() {
   )
 }
 
+function mediaGroups(items: MediaItem[]) {
+  const photos = items.filter((item) => item.kind === 'photo')
+  const cards = items.filter((item) => item.kind === 'card' || item.kind === 'video')
+  const preferred = ['Портрет', 'Альтернатива']
+  const titles = [...new Set(photos.map((item) => item.title || 'Фото'))]
+  titles.sort((a, b) => {
+    const left = preferred.indexOf(a)
+    const right = preferred.indexOf(b)
+    if (left === -1 && right === -1) return a.localeCompare(b, 'ru')
+    if (left === -1) return 1
+    if (right === -1) return -1
+    return left - right
+  })
+  const groups = titles.map((title) => ({ title, items: photos.filter((item) => (item.title || 'Фото') === title) }))
+  if (cards.length) groups.push({ title: 'Видеовизитки', items: cards })
+  return groups
+}
+
 export function ModelProfilePage() {
   const { id } = useParams()
-  const [params] = useSearchParams()
-  const navigate = useNavigate()
-  const { state, blockChild, setAppPhotos } = useStore()
-  const appId = params.get('app')
+  const { state, blockChild } = useStore()
   const person = state.children.find((item) => item.id === id)
-  const [picked, setPicked] = useState<string[]>([])
-
-  useEffect(() => {
-    const found = state.applications.find((item) => item.id === appId)
-    setPicked(found?.photoIds ?? [])
-  }, [appId, state.applications])
 
   if (!person) return <p className="empty">Анкета не найдена.</p>
   const parent = state.parents.find((item) => item.id === person.parentId)
-  const media = state.media.filter((item) => item.childId === person.id && (item.kind === 'photo' || item.kind === 'card'))
+  const avatar = state.media.find((item) => item.id === person.mainPhotoId)
+  const groups = mediaGroups(state.media.filter((item) => item.childId === person.id))
 
   return (
     <>
       <Link to="/admin/models" className="muted">
         ← База моделей
       </Link>
-      <div className="spread">
-        <div>
-          <p className="kicker">Профиль</p>
-          <h1 className="serif" style={{ fontSize: 48 }}>
-            {person.firstName} {person.lastName}
-          </h1>
-          <p className="muted">
-            {parent?.name} · {parent?.phone}
-          </p>
-        </div>
-        <button className="btn btn-bad" type="button" onClick={() => blockChild(person.id, !person.blocked)}>
-          {person.blocked ? 'Разблокировать' : 'Заблокировать'}
-        </button>
-      </div>
-      <div className="row">
-        <StaleBadges child={person} media={state.media} days={state.settings.staleDays} />
-        {!person.verified && <span className="badge warn">На проверке</span>}
-        {person.blocked && <span className="badge bad">Заблокирован</span>}
-      </div>
-      <div className="shots">
-        {media.map((item) => {
-          if (item.kind === 'card') {
-            return (
-              <div key={item.id} className="file">
-                <div className="shot">
-                  <img src={asset(item.src)} alt={item.title} />
-                  <span className="kind">{item.video ? 'видео' : 'визитка'}</span>
-                </div>
-              </div>
-            )
-          }
-          const on = picked.includes(item.id)
-          return (
-            <div key={item.id} className="file">
-              <button
-                type="button"
-                className={on ? 'shot on' : 'shot'}
-                onClick={() => setPicked((currentIds) => (currentIds.includes(item.id) ? currentIds.filter((photoId) => photoId !== item.id) : [...currentIds, item.id]))}
-              >
-                <img src={asset(item.src)} alt={item.title} />
-              </button>
-              {appId && (
-                <button
-                  type="button"
-                  className={on ? 'tick on' : 'tick'}
-                  aria-label={on ? 'Снять выбор' : 'Выбрать'}
-                  onClick={() => setPicked((currentIds) => (currentIds.includes(item.id) ? currentIds.filter((photoId) => photoId !== item.id) : [...currentIds, item.id]))}
-                />
-              )}
+      <section className="profile-head">
+        <div className="avatar avatar-lg">{avatar ? <img src={asset(avatar.src)} alt="" /> : person.firstName.slice(0, 1)}</div>
+        <div className="stack">
+          <div className="spread">
+            <div>
+              <p className="kicker">Профиль</p>
+              <h1 className="serif" style={{ fontSize: 48 }}>
+                {person.firstName} {person.lastName}
+              </h1>
+              <p className="muted">
+                {parent?.name} · {parent?.phone}
+              </p>
             </div>
-          )
-        })}
-      </div>
-      {appId && (
-        <div className="row">
-          <button
-            className="btn btn-gold"
-            type="button"
-            disabled={!picked.length}
-            onClick={() => {
-              const target = state.applications.find((item) => item.id === appId && item.childId === person.id)
-              if (!target) return
-              setAppPhotos(target.id, picked)
-              navigate(`/admin/castings/${target.castingId}`)
-            }}
-          >
-            Заменить
-          </button>
-          <button
-            className="btn btn-ghost"
-            type="button"
-            disabled={!picked.length}
-            onClick={() => {
-              const target = state.applications.find((item) => item.id === appId && item.childId === person.id)
-              if (!target) return
-              setAppPhotos(target.id, [...target.photoIds, ...picked])
-              navigate(`/admin/castings/${target.castingId}`)
-            }}
-          >
-            Добавить
-          </button>
+            <button className="btn btn-bad" type="button" onClick={() => blockChild(person.id, !person.blocked)}>
+              {person.blocked ? 'Разблокировать' : 'Заблокировать'}
+            </button>
+          </div>
+          <div className="row">
+            <StaleBadges child={person} media={state.media} days={state.settings.staleDays} />
+            {!person.verified && <span className="badge warn">На проверке</span>}
+            {person.blocked && <span className="badge bad">Заблокирован</span>}
+          </div>
+          <div className="grid-2">
+            <div className="field">
+              <span>Пол</span>
+              <p>{genderWord(person.gender)}</p>
+            </div>
+            <div className="field">
+              <span>Дата рождения</span>
+              <p>
+                {formatDate(person.birthDate)} · {ageFrom(person.birthDate)} лет
+              </p>
+            </div>
+            <div className="field">
+              <span>Рост</span>
+              <p>{person.height} см</p>
+            </div>
+            <div className="field">
+              <span>Город</span>
+              <p>{person.city}</p>
+            </div>
+            <div className="field">
+              <span>Глаза</span>
+              <p>{person.eyeColor}</p>
+            </div>
+            <div className="field">
+              <span>Волосы</span>
+              <p>{person.hairColor}</p>
+            </div>
+            <div className="field">
+              <span>Обувь</span>
+              <p>{person.shoe}</p>
+            </div>
+            <div className="field">
+              <span>Опыт</span>
+              <p>{person.experience}</p>
+            </div>
+          </div>
+          <div className="field">
+            <span>О ребёнке</span>
+            <p>{person.about || '—'}</p>
+          </div>
         </div>
-      )}
-      <div className="grid-2">
-        <div className="field">
-          <span>Пол</span>
-          <p>{genderWord(person.gender)}</p>
-        </div>
-        <div className="field">
-          <span>Дата рождения</span>
-          <p>
-            {formatDate(person.birthDate)} · {ageFrom(person.birthDate)} лет
-          </p>
-        </div>
-        <div className="field">
-          <span>Рост</span>
-          <p>{person.height} см</p>
-        </div>
-        <div className="field">
-          <span>Город</span>
-          <p>{person.city}</p>
-        </div>
-        <div className="field">
-          <span>Глаза</span>
-          <p>{person.eyeColor}</p>
-        </div>
-        <div className="field">
-          <span>Волосы</span>
-          <p>{person.hairColor}</p>
-        </div>
-        <div className="field">
-          <span>Обувь</span>
-          <p>{person.shoe}</p>
-        </div>
-        <div className="field">
-          <span>Опыт</span>
-          <p>{person.experience}</p>
-        </div>
-      </div>
-      <div className="field">
-        <span>О ребёнке</span>
-        <p>{person.about || '—'}</p>
-      </div>
+      </section>
+      <section className="stack">
+        <h2 className="serif" style={{ fontSize: 32 }}>
+          Фото и видео
+        </h2>
+        {groups.map((group) => (
+          <div key={group.title} className="stack">
+            <h3 className="serif" style={{ fontSize: 22 }}>
+              {group.title}
+            </h3>
+            <div className="shots">
+              {group.items.map((item) => (
+                <div key={item.id} className="file">
+                  <div className="shot">
+                    <img src={asset(item.src)} alt={item.title} />
+                    {item.kind !== 'photo' && <span className="kind">{item.video ? 'видео' : 'визитка'}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </section>
     </>
   )
 }

@@ -23,8 +23,8 @@ export function StaleBadges({ child, media, days }: { child: Child; media: Media
   )
 }
 
-export function VisitPlayer({ slides, videoSrc }: { slides: string[]; videoSrc?: string | null }) {
-  const [play, setPlay] = useState(false)
+export function VisitPlayer({ slides, videoSrc, autoPlay = false }: { slides: string[]; videoSrc?: string | null; autoPlay?: boolean }) {
+  const [play, setPlay] = useState(autoPlay)
   const [index, setIndex] = useState(0)
 
   useEffect(() => {
@@ -34,7 +34,7 @@ export function VisitPlayer({ slides, videoSrc }: { slides: string[]; videoSrc?:
   }, [play, slides.length])
 
   if (videoSrc) {
-    return <video className="portrait" src={videoSrc} poster={slides[0]} controls playsInline />
+    return <video className="portrait" src={videoSrc} poster={slides[0]} controls autoPlay={autoPlay} playsInline />
   }
 
   const src = slides[play ? index : 0]

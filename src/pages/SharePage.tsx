@@ -10,7 +10,14 @@ export function SharePage() {
   const { state } = useStore()
   const casting = state.castings.find((item) => item.id === id)
   const accepted = state.applications.filter((item) => item.castingId === id && item.status === 'accepted')
-  const allPhotos = accepted.flatMap((item) => state.media.filter((media) => media.childId === item.childId && media.kind === 'photo'))
+  const photosOf = (photoIds: string[], childId: string) => {
+    const attached = photoIds
+      .map((photoId) => state.media.find((media) => media.id === photoId))
+      .filter((media): media is NonNullable<typeof media> => Boolean(media && media.kind === 'photo'))
+    if (attached.length) return attached
+    return state.media.filter((media) => media.childId === childId && media.kind === 'photo')
+  }
+  const allPhotos = accepted.flatMap((item) => photosOf(item.photoIds, item.childId))
   const [picked, setPicked] = useState<string[]>(() => allPhotos.map((item) => item.id))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -64,15 +71,10 @@ export function SharePage() {
         const person = state.children.find((child) => child.id === item.childId)
         if (!person) return null
         const number = index + 1
-        const photos = state.media.filter((media) => media.childId === person.id && media.kind === 'photo')
-        const cover = state.media.find((media) => media.id === item.coverPhotoId) || photos[0]
+        const photos = photosOf(item.photoIds, person.id)
         const cards = visitCards(state.media, person.id)
         return (
           <article key={item.id} className="model">
-            <div className="model-photo">
-              <span className="model-no">{number}</span>
-              <PortraitBlock src={cover?.src} name={person.firstName} />
-            </div>
             <div className="stack">
               <h2 className="serif">
                 {number}. {person.firstName} {person.lastName}
@@ -83,6 +85,14 @@ export function SharePage() {
                 Глаза {person.eyeColor} · волосы {person.hairColor} · обувь {person.shoe}
               </p>
               <p className="muted">{person.experience}</p>
+              <div className="share-gallery">
+                {photos.map((photo, photoIndex) => (
+                  <div key={photo.id} className="model-photo">
+                    {photoIndex === 0 && <span className="model-no">{number}</span>}
+                    <PortraitBlock src={photo.src} name={photo.title} />
+                  </div>
+                ))}
+              </div>
               {cards.map((card) => (
                 <VisitPlayer
                   key={card.id}
