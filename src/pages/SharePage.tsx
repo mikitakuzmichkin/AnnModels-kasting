@@ -35,7 +35,8 @@ export function SharePage() {
         .filter((item) => all || picked.includes(item.id))
         .map((item) => {
           const person = state.children.find((child) => child.id === item.childId)
-          return { name: `${person?.firstName || 'model'}-${item.title}.jpg`, src: item.src }
+          const number = accepted.findIndex((entry) => entry.childId === item.childId) + 1
+          return { name: `${number}-${person?.firstName || 'model'}-${item.title}.jpg`, src: item.src }
         })
       await downloadZip(files, `${casting!.brand}-podborka.zip`)
     } catch {
@@ -59,18 +60,22 @@ export function SharePage() {
         </p>
       </header>
       {!accepted.length && <p className="empty">На этот кастинг ещё никого не утвердили.</p>}
-      {accepted.map((item) => {
+      {accepted.map((item, index) => {
         const person = state.children.find((child) => child.id === item.childId)
         if (!person) return null
+        const number = index + 1
         const photos = state.media.filter((media) => media.childId === person.id && media.kind === 'photo')
         const cover = state.media.find((media) => media.id === item.coverPhotoId) || photos[0]
         const cards = visitCards(state.media, person.id)
         return (
           <article key={item.id} className="model">
-            <PortraitBlock src={cover?.src} name={person.firstName} />
+            <div className="model-photo">
+              <span className="model-no">{number}</span>
+              <PortraitBlock src={cover?.src} name={person.firstName} />
+            </div>
             <div className="stack">
               <h2 className="serif">
-                {person.firstName} {person.lastName}
+                {number}. {person.firstName} {person.lastName}
               </h2>
               <p>
                 {ageFrom(person.birthDate)} лет · {person.height} см · {genderWord(person.gender)} · {person.city}
@@ -90,7 +95,9 @@ export function SharePage() {
                 {photos.map((photo) => (
                   <label key={photo.id} className="row">
                     <input type="checkbox" checked={picked.includes(photo.id)} onChange={() => toggle(photo.id)} />
-                    <span>{photo.title}</span>
+                    <span>
+                      {number}. {photo.title}
+                    </span>
                   </label>
                 ))}
               </div>

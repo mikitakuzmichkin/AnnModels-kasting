@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, NavLink, Navigate, Outlet, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Modal, Portrait, StaleBadges } from '../../components/ui'
-import { ageFrom, asset, copyText, daySeries, formatDate, hashUrl, miniLink, visitCards } from '../../lib/format'
+import { ageFrom, asset, copyText, daySeries, formatDate, genderWord, hashUrl, miniLink, visitCards } from '../../lib/format'
 import { CITIES, EYES, HAIR } from '../../lib/format'
 import { useStore } from '../../store'
 import type { AppStatus, Casting, City, Gender } from '../../types'
@@ -370,33 +370,21 @@ function ApplicationCard({ appId }: { appId: string }) {
   const app = state.applications.find((item) => item.id === appId)
   const model = state.children.find((item) => item.id === app?.childId)
   const [zoomId, setZoomId] = useState<string | null>(null)
-  const [picked, setPicked] = useState<string[]>([])
   if (!app || !model) return null
 
   const photos = app.photoIds
     .map((id) => state.media.find((item) => item.id === id))
     .filter((item): item is NonNullable<typeof item> => Boolean(item))
   const cards = visitCards(state.media, model.id)
-  const portfolio = state.media.filter((item) => item.childId === model.id && item.kind === 'photo')
   const avatar = state.media.find((item) => item.id === model.mainPhotoId) || photos[0]
   const shown = state.media.find((item) => item.id === zoomId)
-  const profile = `/admin/models?child=${model.id}`
-
-  function openReview(mediaId: string) {
-    setPicked(app!.photoIds)
-    setZoomId(mediaId)
-  }
-
-  function toggle(id: string) {
-    setPicked((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]))
-  }
+  const profile = `/admin/models?child=${model.id}&app=${app.id}`
 
   function drop(id: string) {
     setAppPhotos(
       app!.id,
       app!.photoIds.filter((item) => item !== id),
     )
-    setPicked((current) => current.filter((item) => item !== id))
     if (zoomId === id) setZoomId(null)
   }
 
@@ -440,7 +428,7 @@ function ApplicationCard({ appId }: { appId: string }) {
       <div className="film">
         {photos.map((photo) => (
           <div key={photo.id} className="file">
-            <button type="button" className="shot" onClick={() => openReview(photo.id)}>
+            <button type="button" className="shot" onClick={() => setZoomId(photo.id)}>
               <img src={asset(photo.src)} alt={photo.title} />
             </button>
             <button type="button" className="shot-x" aria-label="Удалить" onClick={() => drop(photo.id)}>
@@ -450,7 +438,7 @@ function ApplicationCard({ appId }: { appId: string }) {
         ))}
         {cards.map((card) => (
           <div key={card.id} className="file">
-            <button type="button" className="shot" onClick={() => openReview(card.id)}>
+            <button type="button" className="shot" onClick={() => setZoomId(card.id)}>
               <img src={asset(card.src)} alt={card.title} />
               <span className="kind">{card.video ? 'видео' : 'визитка'}</span>
             </button>
@@ -461,45 +449,13 @@ function ApplicationCard({ appId }: { appId: string }) {
         </Link>
       </div>
       {shown && (
-        <Modal title="Все фото" onClose={() => setZoomId(null)}>
+        <Modal title={shown.kind === 'card' ? 'Видеовизитка' : 'Фото'} onClose={() => setZoomId(null)}>
           <div className="zoom-frame">
             {shown.video ? (
               <video src={asset(shown.src)} controls autoPlay playsInline />
             ) : (
               <img src={asset(shown.src)} alt={shown.title} />
             )}
-          </div>
-          <p className="muted">Отметьте кадры анкеты. «Заменить все» подставит их в отклик, «Добавить» допишет к выбранным.</p>
-          <div className="shots">
-            {portfolio.map((photo) => {
-              const on = picked.includes(photo.id)
-              return (
-                <div key={photo.id} className="file">
-                  <button type="button" className={on ? 'shot on' : 'shot'} onClick={() => setZoomId(photo.id)}>
-                    <img src={asset(photo.src)} alt={photo.title} />
-                  </button>
-                  <button type="button" className={on ? 'tick on' : 'tick'} aria-label={on ? 'Снять выбор' : 'Выбрать'} onClick={() => toggle(photo.id)} />
-                  {app.photoIds.includes(photo.id) && (
-                    <button type="button" className="shot-x" aria-label="Удалить из отклика" onClick={() => drop(photo.id)}>
-                      ×
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-          <div className="row">
-            <button className="btn btn-gold btn-sm" type="button" disabled={!picked.length} onClick={() => setAppPhotos(app.id, picked)}>
-              Заменить все
-            </button>
-            <button
-              className="btn btn-ghost btn-sm"
-              type="button"
-              disabled={!picked.length}
-              onClick={() => setAppPhotos(app.id, [...app.photoIds, ...picked])}
-            >
-              Добавить
-            </button>
           </div>
         </Modal>
       )}
@@ -508,9 +464,11 @@ function ApplicationCard({ appId }: { appId: string }) {
 }
 
 export function ModelsPage() {
-  const { state, verifyChild, blockChild, updateChild } = useStore()
+  const { state, setAppPhotos } = useStore()
   const [params] = useSearchParams()
+  const navigate = useNavigate()
   const requested = params.get('child')
+  const appId = params.get('app')
   const [query, setQuery] = useState('')
   const [city, setCity] = useState('')
   const [gender, setGender] = useState('')
@@ -523,10 +481,16 @@ export function ModelsPage() {
   const [experience, setExperience] = useState('')
   const [status, setStatus] = useState('all')
   const [selected, setSelected] = useState<string | null>(requested)
+  const [picked, setPicked] = useState<string[]>([])
 
   useEffect(() => {
     if (requested) setSelected(requested)
   }, [requested])
+
+  useEffect(() => {
+    const found = state.applications.find((item) => item.id === appId)
+    setPicked(found?.photoIds ?? [])
+  }, [appId, state.applications])
 
   const result = state.children.filter((person) => {
     const age = ageFrom(person.birthDate)
@@ -658,36 +622,230 @@ export function ModelsPage() {
           <div className="shots">
             {state.media
               .filter((item) => item.childId === current.id && (item.kind === 'photo' || item.kind === 'card'))
-              .map((item) => (
-                <img key={item.id} className="portrait" src={asset(item.src)} alt={item.title} />
-              ))}
+              .map((item) => {
+                if (item.kind === 'card') {
+                  return (
+                    <div key={item.id} className="file">
+                      <div className="shot">
+                        <img src={asset(item.src)} alt={item.title} />
+                        <span className="kind">{item.video ? 'видео' : 'визитка'}</span>
+                      </div>
+                    </div>
+                  )
+                }
+                const on = picked.includes(item.id)
+                return (
+                  <div key={item.id} className="file">
+                    <button type="button" className={on ? 'shot on' : 'shot'} onClick={() => setPicked((currentIds) => (currentIds.includes(item.id) ? currentIds.filter((id) => id !== item.id) : [...currentIds, item.id]))}>
+                      <img src={asset(item.src)} alt={item.title} />
+                    </button>
+                    <button
+                      type="button"
+                      className={on ? 'tick on' : 'tick'}
+                      aria-label={on ? 'Снять выбор' : 'Выбрать'}
+                      onClick={() => setPicked((currentIds) => (currentIds.includes(item.id) ? currentIds.filter((id) => id !== item.id) : [...currentIds, item.id]))}
+                    />
+                  </div>
+                )
+              })}
           </div>
-          <label className="field">
+          {appId && (
+            <div className="row">
+              <button
+                className="btn btn-gold"
+                type="button"
+                disabled={!picked.length}
+                onClick={() => {
+                  const target = state.applications.find((item) => item.id === appId && item.childId === current.id)
+                  if (!target) return
+                  setAppPhotos(target.id, picked)
+                  navigate(`/admin/castings/${target.castingId}`)
+                }}
+              >
+                Заменить
+              </button>
+              <button
+                className="btn btn-ghost"
+                type="button"
+                disabled={!picked.length}
+                onClick={() => {
+                  const target = state.applications.find((item) => item.id === appId && item.childId === current.id)
+                  if (!target) return
+                  setAppPhotos(target.id, [...target.photoIds, ...picked])
+                  navigate(`/admin/castings/${target.castingId}`)
+                }}
+              >
+                Добавить
+              </button>
+            </div>
+          )}
+          <div className="field">
             <span>Рост</span>
-            <input type="number" defaultValue={current.height} onBlur={(event) => updateChild(current.id, { height: Number(event.target.value) })} />
-          </label>
-          <label className="field">
-            <span>Город</span>
-            <select defaultValue={current.city} onChange={(event) => updateChild(current.id, { city: event.target.value as City })}>
-              {CITIES.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>Опыт</span>
-            <input defaultValue={current.experience} onBlur={(event) => updateChild(current.id, { experience: event.target.value })} />
-          </label>
-          <div className="row">
-            <button className="btn btn-ok btn-sm" type="button" onClick={() => verifyChild(current.id, !current.verified)}>
-              {current.verified ? 'Снять верификацию' : 'Верифицировать'}
-            </button>
-            <button className="btn btn-bad btn-sm" type="button" onClick={() => blockChild(current.id, !current.blocked)}>
-              {current.blocked ? 'Разблокировать' : 'Заблокировать'}
-            </button>
+            <p>{current.height} см</p>
           </div>
+          <div className="field">
+            <span>Город</span>
+            <p>{current.city}</p>
+          </div>
+          <div className="field">
+            <span>Опыт</span>
+            <p>{current.experience}</p>
+          </div>
+          <Link className="btn btn-gold btn-block" to={`/admin/models/${current.id}${appId ? `?app=${appId}` : ''}`}>
+            Перейти на полную страницу профиля
+          </Link>
         </Modal>
       )}
+    </>
+  )
+}
+
+export function ModelProfilePage() {
+  const { id } = useParams()
+  const [params] = useSearchParams()
+  const navigate = useNavigate()
+  const { state, blockChild, setAppPhotos } = useStore()
+  const appId = params.get('app')
+  const person = state.children.find((item) => item.id === id)
+  const [picked, setPicked] = useState<string[]>([])
+
+  useEffect(() => {
+    const found = state.applications.find((item) => item.id === appId)
+    setPicked(found?.photoIds ?? [])
+  }, [appId, state.applications])
+
+  if (!person) return <p className="empty">Анкета не найдена.</p>
+  const parent = state.parents.find((item) => item.id === person.parentId)
+  const media = state.media.filter((item) => item.childId === person.id && (item.kind === 'photo' || item.kind === 'card'))
+
+  return (
+    <>
+      <Link to="/admin/models" className="muted">
+        ← База моделей
+      </Link>
+      <div className="spread">
+        <div>
+          <p className="kicker">Профиль</p>
+          <h1 className="serif" style={{ fontSize: 48 }}>
+            {person.firstName} {person.lastName}
+          </h1>
+          <p className="muted">
+            {parent?.name} · {parent?.phone}
+          </p>
+        </div>
+        <button className="btn btn-bad" type="button" onClick={() => blockChild(person.id, !person.blocked)}>
+          {person.blocked ? 'Разблокировать' : 'Заблокировать'}
+        </button>
+      </div>
+      <div className="row">
+        <StaleBadges child={person} media={state.media} days={state.settings.staleDays} />
+        {!person.verified && <span className="badge warn">На проверке</span>}
+        {person.blocked && <span className="badge bad">Заблокирован</span>}
+      </div>
+      <div className="shots">
+        {media.map((item) => {
+          if (item.kind === 'card') {
+            return (
+              <div key={item.id} className="file">
+                <div className="shot">
+                  <img src={asset(item.src)} alt={item.title} />
+                  <span className="kind">{item.video ? 'видео' : 'визитка'}</span>
+                </div>
+              </div>
+            )
+          }
+          const on = picked.includes(item.id)
+          return (
+            <div key={item.id} className="file">
+              <button
+                type="button"
+                className={on ? 'shot on' : 'shot'}
+                onClick={() => setPicked((currentIds) => (currentIds.includes(item.id) ? currentIds.filter((photoId) => photoId !== item.id) : [...currentIds, item.id]))}
+              >
+                <img src={asset(item.src)} alt={item.title} />
+              </button>
+              {appId && (
+                <button
+                  type="button"
+                  className={on ? 'tick on' : 'tick'}
+                  aria-label={on ? 'Снять выбор' : 'Выбрать'}
+                  onClick={() => setPicked((currentIds) => (currentIds.includes(item.id) ? currentIds.filter((photoId) => photoId !== item.id) : [...currentIds, item.id]))}
+                />
+              )}
+            </div>
+          )
+        })}
+      </div>
+      {appId && (
+        <div className="row">
+          <button
+            className="btn btn-gold"
+            type="button"
+            disabled={!picked.length}
+            onClick={() => {
+              const target = state.applications.find((item) => item.id === appId && item.childId === person.id)
+              if (!target) return
+              setAppPhotos(target.id, picked)
+              navigate(`/admin/castings/${target.castingId}`)
+            }}
+          >
+            Заменить
+          </button>
+          <button
+            className="btn btn-ghost"
+            type="button"
+            disabled={!picked.length}
+            onClick={() => {
+              const target = state.applications.find((item) => item.id === appId && item.childId === person.id)
+              if (!target) return
+              setAppPhotos(target.id, [...target.photoIds, ...picked])
+              navigate(`/admin/castings/${target.castingId}`)
+            }}
+          >
+            Добавить
+          </button>
+        </div>
+      )}
+      <div className="grid-2">
+        <div className="field">
+          <span>Пол</span>
+          <p>{genderWord(person.gender)}</p>
+        </div>
+        <div className="field">
+          <span>Дата рождения</span>
+          <p>
+            {formatDate(person.birthDate)} · {ageFrom(person.birthDate)} лет
+          </p>
+        </div>
+        <div className="field">
+          <span>Рост</span>
+          <p>{person.height} см</p>
+        </div>
+        <div className="field">
+          <span>Город</span>
+          <p>{person.city}</p>
+        </div>
+        <div className="field">
+          <span>Глаза</span>
+          <p>{person.eyeColor}</p>
+        </div>
+        <div className="field">
+          <span>Волосы</span>
+          <p>{person.hairColor}</p>
+        </div>
+        <div className="field">
+          <span>Обувь</span>
+          <p>{person.shoe}</p>
+        </div>
+        <div className="field">
+          <span>Опыт</span>
+          <p>{person.experience}</p>
+        </div>
+      </div>
+      <div className="field">
+        <span>О ребёнке</span>
+        <p>{person.about || '—'}</p>
+      </div>
     </>
   )
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { HashRouter } from 'react-router-dom'
-import { AdminLayout, AdminLogin, AnalyticsPage, CastingBoard, CastingForm, CastingList, ChannelPage, ModelsPage, SettingsPage } from './pages/admin/screens'
+import { AdminLayout, AdminLogin, AnalyticsPage, CastingBoard, CastingForm, CastingList, ChannelPage, ModelProfilePage, ModelsPage, SettingsPage } from './pages/admin/screens'
 import { Hub } from './pages/Hub'
 import {
   AppsPage,
@@ -52,6 +52,7 @@ export function App() {
             <Route path="castings/new" element={<CastingForm />} />
             <Route path="castings/:id/edit" element={<CastingForm />} />
             <Route path="castings/:id" element={<CastingBoard />} />
+            <Route path="models/:id" element={<ModelProfilePage />} />
             <Route path="models" element={<ModelsPage />} />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="settings" element={<SettingsPage />} />

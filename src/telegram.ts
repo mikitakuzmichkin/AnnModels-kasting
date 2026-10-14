@@ -9,6 +9,7 @@ interface TelegramWebApp {
   ready: () => void
   expand: () => void
   requestFullscreen?: () => void
+  disableVerticalSwipes?: () => void
   initData: string
   platform: string
   initDataUnsafe?: { start_param?: string }
@@ -52,11 +53,21 @@ export function initTelegram() {
     /* Цвет шапки в части клиентов только для чтения. */
   }
   if (isTelegram()) {
+    const lockSwipe = () => {
+      try {
+        app.disableVerticalSwipes?.()
+      } catch {
+        /* Жест закрытия остаётся в клиентах без этого метода. */
+      }
+    }
     try {
       app.requestFullscreen?.()
     } catch {
       /* Старые клиенты оставляют обычную шапку. */
     }
+    lockSwipe()
+    app.onEvent?.('fullscreenChanged', lockSwipe)
+    app.onEvent?.('viewportChanged', lockSwipe)
   }
   const applyInsets = () => {
     const top = (app.safeAreaInset?.top ?? 0) + (app.contentSafeAreaInset?.top ?? 0)

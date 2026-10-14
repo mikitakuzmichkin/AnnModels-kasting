@@ -293,7 +293,9 @@ a.btn:focus {
   display: flex;
   flex-direction: column;
 }
-.tg-app { min-height: 100dvh; border-radius: 0; padding-top: var(--sat); background: var(--bg); }
+.tg-app { min-height: 100dvh; border-radius: 0; padding-top: var(--sat); background: var(--bg); overscroll-behavior: none; }
+.tg-app .playout,
+.tg-app .pbody { overscroll-behavior: none; }
 .tg-app .phead {
   margin-top: calc(var(--sat) * -1);
   padding-top: calc(14px + var(--sat));
@@ -469,6 +471,25 @@ a.btn:focus {
 
 .client { width: min(880px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 96px; display: flex; flex-direction: column; gap: 22px; }
 .model { display: grid; gap: 14px; }
+.model-photo { position: relative; }
+.model-no {
+  position: absolute;
+  z-index: 1;
+  top: 12px;
+  left: 12px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #ffffff;
+  color: var(--text);
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+}
 @media (min-width: 740px) {
   .model { grid-template-columns: 280px 1fr; align-items: start; }
 }
