@@ -164,16 +164,10 @@ function fittingChildren(casting: Parameters<typeof fitReasons>[0], children: Ch
 
 export function Feed() {
   const { state, myChildren } = useStore()
-  const [gender, setGender] = useState<'any' | Gender>('any')
-  const [age, setAge] = useState('')
-  const [height, setHeight] = useState('')
 
   const castings = state.castings
     .filter((item) => item.published)
     .filter((item) => fittingChildren(item, myChildren).length > 0)
-    .filter((item) => gender === 'any' || item.gender === 'any' || item.gender === gender)
-    .filter((item) => age === '' || (Number(age) >= item.ageMin && Number(age) <= item.ageMax))
-    .filter((item) => height === '' || (Number(height) >= item.heightMin && Number(height) <= item.heightMax))
     .sort((a, b) => a.date.localeCompare(b.date))
 
   return (
@@ -183,26 +177,6 @@ export function Feed() {
         <h1 className="serif" style={{ fontSize: 40, lineHeight: 0.95 }}>
           Активные кастинги
         </h1>
-      </div>
-      <div className="filters">
-        <label>
-          <span>Пол</span>
-          <select value={gender} onChange={(event) => setGender(event.target.value as 'any' | Gender)}>
-            <option value="any">Любой</option>
-            <option value="female">Девочки</option>
-            <option value="male">Мальчики</option>
-          </select>
-        </label>
-        <div className="grid-2">
-          <label>
-            <span>Возраст</span>
-            <input value={age} onChange={(event) => setAge(event.target.value)} inputMode="numeric" placeholder="7" />
-          </label>
-          <label>
-            <span>Рост, см</span>
-            <input value={height} onChange={(event) => setHeight(event.target.value)} inputMode="numeric" placeholder="122" />
-          </label>
-        </div>
       </div>
       {castings.map((item) => {
         const names = fittingChildren(item, myChildren).map((person) => person.firstName)

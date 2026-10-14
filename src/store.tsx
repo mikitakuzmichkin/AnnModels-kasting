@@ -32,6 +32,7 @@ type Action =
   | { type: 'addApp'; app: Application }
   | { type: 'setStatus'; id: string; status: AppStatus }
   | { type: 'setCover'; id: string; mediaId: string }
+  | { type: 'setPhotos'; id: string; photoIds: string[] }
   | { type: 'verify'; id: string; verified: boolean }
   | { type: 'block'; id: string; blocked: boolean }
   | { type: 'settings'; patch: Partial<Settings> }
@@ -161,6 +162,16 @@ function reducer(state: State, action: Action): State {
           item.id === action.id ? { ...item, coverPhotoId: action.mediaId, updatedAt: new Date().toISOString() } : item,
         ),
       }
+    case 'setPhotos':
+      return {
+        ...state,
+        applications: state.applications.map((item) => {
+          if (item.id !== action.id) return item
+          const photoIds = action.photoIds.filter((id, index, list) => list.indexOf(id) === index)
+          const coverPhotoId = photoIds.includes(item.coverPhotoId) ? item.coverPhotoId : photoIds[0] || ''
+          return { ...item, photoIds, coverPhotoId, updatedAt: new Date().toISOString() }
+        }),
+      }
     case 'verify':
       return {
         ...state,
@@ -224,6 +235,7 @@ interface StoreValue {
   apply: (castingId: string, childId: string, photoIds: string[]) => string | null
   setStatus: (id: string, status: AppStatus) => void
   setCover: (id: string, mediaId: string) => void
+  setAppPhotos: (id: string, photoIds: string[]) => void
   verifyChild: (id: string, verified: boolean) => void
   blockChild: (id: string, blocked: boolean) => void
   setSettings: (patch: Partial<Settings>) => void
@@ -369,6 +381,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     setCover(id, mediaId) {
       dispatch({ type: 'setCover', id, mediaId })
+    },
+    setAppPhotos(id, photoIds) {
+      dispatch({ type: 'setPhotos', id, photoIds })
     },
     verifyChild(id, verified) {
       dispatch({ type: 'verify', id, verified })

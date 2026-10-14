@@ -1,7 +1,7 @@
-import { useMemo, useState, type FormEvent } from 'react'
-import { Link, NavLink, Navigate, Outlet, useNavigate, useParams } from 'react-router-dom'
-import { Modal, Portrait, StaleBadges, StatusBadge, VisitPlayer } from '../../components/ui'
-import { ageFrom, asset, copyText, daySeries, formatDate, genderWord, hashUrl, miniLink, visitCards } from '../../lib/format'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Link, NavLink, Navigate, Outlet, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Modal, Portrait, StaleBadges } from '../../components/ui'
+import { ageFrom, asset, copyText, daySeries, formatDate, hashUrl, miniLink, visitCards } from '../../lib/format'
 import { CITIES, EYES, HAIR } from '../../lib/format'
 import { useStore } from '../../store'
 import type { AppStatus, Casting, City, Gender } from '../../types'
@@ -120,9 +120,7 @@ export function CastingList() {
         <h1 className="serif" style={{ fontSize: 48 }}>
           Кастинги
         </h1>
-        <Link className="btn btn-gold" to="/admin/castings/new">
-          Новая карточка
-        </Link>
+        <Link className="btn btn-gold" to="/admin/castings/new">Новая карточка</Link>
       </div>
       <div className="list">
         {state.castings.map((casting) => {
@@ -310,19 +308,13 @@ export function CastingForm() {
 
 export function CastingBoard() {
   const { id } = useParams()
-  const { state, setStatus, setCover } = useStore()
+  const { state } = useStore()
   const [tab, setTab] = useState<AppStatus>('review')
-  const [openId, setOpenId] = useState<string | null>(null)
   const [copied, setCopied] = useState('')
   const casting = state.castings.find((item) => item.id === id)
   if (!casting) return <p className="empty">Кастинг не найден.</p>
 
   const items = state.applications.filter((item) => item.castingId === casting.id && item.status === tab)
-  const opened = state.applications.find((item) => item.id === openId)
-  const person = state.children.find((item) => item.id === opened?.childId)
-  const parent = state.parents.find((item) => item.id === person?.parentId)
-  const gallery = state.media.filter((item) => item.childId === person?.id && item.kind === 'photo')
-  const cards = person ? visitCards(state.media, person.id) : []
 
   async function copyShare() {
     if (!casting) return
@@ -364,92 +356,161 @@ export function CastingBoard() {
         })}
       </div>
       <div className="list">
-        {items.map((app) => {
-          const model = state.children.find((item) => item.id === app.childId)
-          const cover = state.media.find((item) => item.id === app.coverPhotoId)
-          if (!model) return null
-          return (
-            <article key={app.id} className="app-card">
-              <button type="button" onClick={() => setOpenId(app.id)} style={{ padding: 0, border: 0, background: 'transparent' }}>
-                <Portrait src={cover?.src} name={model.firstName} />
-              </button>
-              <div className="stack">
-                <button type="button" onClick={() => setOpenId(app.id)} style={{ padding: 0, border: 0, background: 'transparent', textAlign: 'left' }}>
-                  <strong>
-                    {model.firstName} {model.lastName}
-                  </strong>
-                  <p className="muted">
-                    {ageFrom(model.birthDate)} лет · {model.height} см · {model.city}
-                  </p>
-                </button>
-                <div className="row">
-                  <StaleBadges child={model} media={state.media} days={state.settings.staleDays} />
-                  {!model.verified && <span className="badge warn">На проверке</span>}
-                  {model.blocked && <span className="badge bad">Блок</span>}
-                </div>
-                <div className="row">
-                  {app.status !== 'accepted' && (
-                    <button className="btn btn-ok btn-sm" type="button" onClick={() => setStatus(app.id, 'accepted')}>
-                      Одобрить
-                    </button>
-                  )}
-                  {app.status !== 'rejected' && (
-                    <button className="btn btn-bad btn-sm" type="button" onClick={() => setStatus(app.id, 'rejected')}>
-                      В архив / отказ
-                    </button>
-                  )}
-                  {app.status !== 'review' && (
-                    <button className="btn btn-ghost btn-sm" type="button" onClick={() => setStatus(app.id, 'review')}>
-                      В текущие
-                    </button>
-                  )}
-                </div>
-              </div>
-            </article>
-          )
-        })}
+        {items.map((app) => (
+          <ApplicationCard key={app.id} appId={app.id} />
+        ))}
         {!items.length && <p className="empty">В этой вкладке пусто.</p>}
       </div>
-      {opened && person && (
-        <Modal title={`${person.firstName} ${person.lastName}`} onClose={() => setOpenId(null)}>
+    </>
+  )
+}
+
+function ApplicationCard({ appId }: { appId: string }) {
+  const { state, setStatus, setAppPhotos } = useStore()
+  const app = state.applications.find((item) => item.id === appId)
+  const model = state.children.find((item) => item.id === app?.childId)
+  const [zoomId, setZoomId] = useState<string | null>(null)
+  const [picked, setPicked] = useState<string[]>([])
+  if (!app || !model) return null
+
+  const photos = app.photoIds
+    .map((id) => state.media.find((item) => item.id === id))
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+  const cards = visitCards(state.media, model.id)
+  const portfolio = state.media.filter((item) => item.childId === model.id && item.kind === 'photo')
+  const avatar = state.media.find((item) => item.id === model.mainPhotoId) || photos[0]
+  const shown = state.media.find((item) => item.id === zoomId)
+  const profile = `/admin/models?child=${model.id}`
+
+  function openReview(mediaId: string) {
+    setPicked(app!.photoIds)
+    setZoomId(mediaId)
+  }
+
+  function toggle(id: string) {
+    setPicked((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]))
+  }
+
+  function drop(id: string) {
+    setAppPhotos(
+      app!.id,
+      app!.photoIds.filter((item) => item !== id),
+    )
+    setPicked((current) => current.filter((item) => item !== id))
+    if (zoomId === id) setZoomId(null)
+  }
+
+  return (
+    <article className="reply">
+      <div className="reply-head">
+        <Link className="avatar" to={profile}>
+          {avatar ? <img src={asset(avatar.src)} alt="" /> : model.firstName.slice(0, 1)}
+        </Link>
+        <div className="stack">
+          <strong>
+            {model.firstName} {model.lastName}
+          </strong>
           <p className="muted">
-            {parent?.name} · {parent?.phone} · {person.city}
+            {ageFrom(model.birthDate)} лет · {model.height} см · {model.city}
           </p>
           <div className="row">
-            <StatusBadge status={opened.status} />
-            <StaleBadges child={person} media={state.media} days={state.settings.staleDays} />
+            <StaleBadges child={model} media={state.media} days={state.settings.staleDays} />
+            {!model.verified && <span className="badge warn">На проверке</span>}
+            {model.blocked && <span className="badge bad">Блок</span>}
           </div>
-          <p>
-            {ageFrom(person.birthDate)} лет · {person.height} см · {genderWord(person.gender)} · глаза {person.eyeColor} · волосы {person.hairColor} · обувь {person.shoe}
-          </p>
-          <p>{person.experience}</p>
-          <p className="muted">{person.about}</p>
-          <p className="kicker">Видеовизитки</p>
-          {cards.map((card) => (
-            <VisitPlayer key={card.id} slides={[asset(card.src)]} videoSrc={card.video ? asset(card.src) : null} />
-          ))}
-          {!cards.length && <p className="muted">Визиток нет.</p>}
-          <p className="kicker">Заменить главное фото отклика</p>
-          <div className="shots">
-            {gallery.map((photo) => (
-              <button
-                key={photo.id}
-                type="button"
-                className={opened.coverPhotoId === photo.id ? 'shot on' : 'shot'}
-                onClick={() => setCover(opened.id, photo.id)}
-              >
-                <img src={asset(photo.src)} alt={photo.title} />
+          <div className="row">
+            {app.status !== 'accepted' && (
+              <button className="btn btn-ok btn-sm" type="button" onClick={() => setStatus(app.id, 'accepted')}>
+                Одобрить
               </button>
-            ))}
+            )}
+            {app.status !== 'rejected' && (
+              <button className="btn btn-bad btn-sm" type="button" onClick={() => setStatus(app.id, 'rejected')}>
+                В архив / отказ
+              </button>
+            )}
+            {app.status !== 'review' && (
+              <button className="btn btn-ghost btn-sm" type="button" onClick={() => setStatus(app.id, 'review')}>
+                В текущие
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="film">
+        {photos.map((photo) => (
+          <div key={photo.id} className="file">
+            <button type="button" className="shot" onClick={() => openReview(photo.id)}>
+              <img src={asset(photo.src)} alt={photo.title} />
+            </button>
+            <button type="button" className="shot-x" aria-label="Удалить" onClick={() => drop(photo.id)}>
+              ×
+            </button>
+          </div>
+        ))}
+        {cards.map((card) => (
+          <div key={card.id} className="file">
+            <button type="button" className="shot" onClick={() => openReview(card.id)}>
+              <img src={asset(card.src)} alt={card.title} />
+              <span className="kind">{card.video ? 'видео' : 'визитка'}</span>
+            </button>
+          </div>
+        ))}
+        <Link className="add-tile" to={profile} aria-label="Добавить фото">
+          +
+        </Link>
+      </div>
+      {shown && (
+        <Modal title="Все фото" onClose={() => setZoomId(null)}>
+          <div className="zoom-frame">
+            {shown.video ? (
+              <video src={asset(shown.src)} controls autoPlay playsInline />
+            ) : (
+              <img src={asset(shown.src)} alt={shown.title} />
+            )}
+          </div>
+          <p className="muted">Отметьте кадры анкеты. «Заменить все» подставит их в отклик, «Добавить» допишет к выбранным.</p>
+          <div className="shots">
+            {portfolio.map((photo) => {
+              const on = picked.includes(photo.id)
+              return (
+                <div key={photo.id} className="file">
+                  <button type="button" className={on ? 'shot on' : 'shot'} onClick={() => setZoomId(photo.id)}>
+                    <img src={asset(photo.src)} alt={photo.title} />
+                  </button>
+                  <button type="button" className={on ? 'tick on' : 'tick'} aria-label={on ? 'Снять выбор' : 'Выбрать'} onClick={() => toggle(photo.id)} />
+                  {app.photoIds.includes(photo.id) && (
+                    <button type="button" className="shot-x" aria-label="Удалить из отклика" onClick={() => drop(photo.id)}>
+                      ×
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          <div className="row">
+            <button className="btn btn-gold btn-sm" type="button" disabled={!picked.length} onClick={() => setAppPhotos(app.id, picked)}>
+              Заменить все
+            </button>
+            <button
+              className="btn btn-ghost btn-sm"
+              type="button"
+              disabled={!picked.length}
+              onClick={() => setAppPhotos(app.id, [...app.photoIds, ...picked])}
+            >
+              Добавить
+            </button>
           </div>
         </Modal>
       )}
-    </>
+    </article>
   )
 }
 
 export function ModelsPage() {
   const { state, verifyChild, blockChild, updateChild } = useStore()
+  const [params] = useSearchParams()
+  const requested = params.get('child')
   const [query, setQuery] = useState('')
   const [city, setCity] = useState('')
   const [gender, setGender] = useState('')
@@ -461,7 +522,11 @@ export function ModelsPage() {
   const [heightMax, setHeightMax] = useState('')
   const [experience, setExperience] = useState('')
   const [status, setStatus] = useState('all')
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, setSelected] = useState<string | null>(requested)
+
+  useEffect(() => {
+    if (requested) setSelected(requested)
+  }, [requested])
 
   const result = state.children.filter((person) => {
     const age = ageFrom(person.birthDate)
@@ -587,6 +652,16 @@ export function ModelsPage() {
       </div>
       {current && (
         <Modal key={current.id} title={`${current.firstName} ${current.lastName}`} onClose={() => setSelected(null)}>
+          <p className="muted">
+            {ageFrom(current.birthDate)} лет · {current.height} см · {current.city} · {current.eyeColor} / {current.hairColor}
+          </p>
+          <div className="shots">
+            {state.media
+              .filter((item) => item.childId === current.id && (item.kind === 'photo' || item.kind === 'card'))
+              .map((item) => (
+                <img key={item.id} className="portrait" src={asset(item.src)} alt={item.title} />
+              ))}
+          </div>
           <label className="field">
             <span>Рост</span>
             <input type="number" defaultValue={current.height} onBlur={(event) => updateChild(current.id, { height: Number(event.target.value) })} />
